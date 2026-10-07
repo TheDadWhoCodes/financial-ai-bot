@@ -109,11 +109,11 @@ def pick_best_dip_and_draft(dip_candidates: list[dict]) -> tuple[str, str] | Non
     {stocks_summary}
 
     TASK:
-    1. Choose the single most attractive buying opportunity or interesting dip set up among these candidates.
+    1. Choose the single most attractive buying opportunity or interesting dip setup among these candidates.
     2. Write a concise, highly readable post following these strict rules:
-       - No introductory headers, role labels (e.g. "Ed:", "Bot:"), or conversational fluff. Start directly with the post content.
+       - No introductory headers, role labels (e.g. "Ed:", "Bot:"), or conversational fluff.
        - Explain simply (ELI5 tone), no jargon.
-       - One short analytical hook sentence (curiosity-driven, clean, no dramatic overhype or massive icons).
+       - One short analytical hook sentence.
        - 1 to 2 sentences explaining why this dip/pullback makes it attractive right now from a valuation or setup standpoint.
        - End with an open-ended question to encourage replies and discussion.
        - Total output MUST be under 275 characters.
@@ -131,9 +131,9 @@ def pick_best_dip_and_draft(dip_candidates: list[dict]) -> tuple[str, str] | Non
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
     )
 
-    # Use standard gemini-2.5-flash-lite
-    MODELS = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"]
-    max_retries = 3
+    # Alternate across flash and flash-lite on retries
+    MODELS = ["gemini-3.8-flash", "gemini-3.1-flash-lite"]
+    max_retries = 4
     delay = 3
 
     for attempt in range(max_retries):
@@ -147,7 +147,6 @@ def pick_best_dip_and_draft(dip_candidates: list[dict]) -> tuple[str, str] | Non
             
             raw_text = response.text.strip()
             
-            # Clean off Markdown fences if present
             if raw_text.startswith("```json"):
                 raw_text = raw_text[7:]
             if raw_text.startswith("```"):
@@ -160,16 +159,13 @@ def pick_best_dip_and_draft(dip_candidates: list[dict]) -> tuple[str, str] | Non
             return result["selected_ticker"], result["post_content"]
 
         except errors.APIError as e:
-            print(f"❌ Gemini API Error ({current_model}): {e}")
-            if getattr(e, 'code', None) in [503, 429] and attempt < max_retries - 1:
-                time.sleep(delay)
-                delay *= 2
+            print(f"⚠️ Gemini API Error ({current_model}): {e}")
+            time.sleep(delay)
+            delay *= 2
         except Exception as e:
-            print(f"❌ JSON/Parsing Error on attempt {attempt + 1}: {e}")
-            print(f"   Raw output was: {getattr(response, 'text', 'None')}")
-            if attempt < max_retries - 1:
-                time.sleep(delay)
-                delay *= 2
+            print(f"⚠️ Parsing Error on attempt {attempt + 1}: {e}")
+            time.sleep(delay)
+            delay *= 2
 
     return None
 
