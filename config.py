@@ -10,10 +10,8 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: int = Field(..., description="You Telegram user or group chat ID")
 
     # Optional / Future Social Tokens (Phase 2)
-    X_API_KEY: SecretStr | None = None
-    X_API_SECRET: SecretStr | None = None
-    X_ACCESS_TOKEN: SecretStr | None = None
-    X_ACCESS_TOKEN_SECRET: SecretStr | None = None
+    THREADS_APP_ID: str
+    THREADS_ACCESS_TOKEN: SecretStr  # <-- Add this line
 
     model_config = SettingsConfigDict(
         env_file=".env",

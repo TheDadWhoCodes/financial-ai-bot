@@ -1,55 +1,83 @@
-import os
-import time
-import requests
-from dotenv import load_dotenv
+import asyncio
+import logging
+import httpx
+from config import settings
+from trend_generator import async_generate_auto_daily_post
 
-# Load credentials from .env
-load_dotenv()
+# Configure logging for daily runs
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-USER_ID = os.getenv("THREADS_APP_ID")
-TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
+GRAPH_API_URL = "https://graph.threads.net/v1.0"
+THREADS_CHAR_LIMIT = 500
 
-def post_to_threads(text_content):
-    if not USER_ID or not TOKEN:
-        print("Missing THREADS_USER_ID or THREADS_ACCESS_TOKEN in environment variables.")
-        return
 
-    # STEP A: Create the media/text container
-    container_url = f"https://graph.threads.net/v1.0/{USER_ID}/threads"
-    container_payload = {
-        "media_type": "TEXT",
-        "text": text_content,
-        "access_token": TOKEN
-    }
+async def post_to_threads(text_content: str) -> str:
+    """Publishes a text post to Threads using Meta's official Graph API."""
+    access_token = settings.THREADS_ACCESS_TOKEN.get_secret_value()
+    user_id = settings.THREADS_APP_ID
 
-    print("Creating Threads draft container...")
-    res_container = requests.post(container_url, data=container_payload).json()
+    if not access_token or not user_id:
+        raise ValueError("Missing THREADS_ACCESS_TOKEN or THREADS_APP_ID in settings.")
 
-    if "id" not in res_container:
-        print(f"Error creating container: {res_container}")
-        return
+    async with httpx.AsyncClient() as client:
+        # Step 1: Create Container
+        container_res = await client.post(
+            f"{GRAPH_API_URL}/{user_id}/threads",
+            data={
+                "media_type": "TEXT",
+                "text": text_content,
+                "access_token": access_token
+            },
+            timeout=15.0
+        )
+        container_res.raise_for_status()
+        creation_id = container_res.json().get("id")
 
-    creation_id = res_container["id"]
-    print(f"Container created! Container ID: {creation_id}")
+        # Step 2: Publish Container
+        publish_res = await client.post(
+            f"{GRAPH_API_URL}/{user_id}/threads_publish",
+            data={
+                "creation_id": creation_id,
+                "access_token": access_token
+            },
+            timeout=15.0
+        )
+        publish_res.raise_for_status()
+        return publish_res.json().get("id")
 
-    # Small pause to allow Meta's backend to process the container
-    time.sleep(2)
 
-    # STEP B: Publish the container live
-    publish_url = f"https://graph.threads.net/v1.0/{USER_ID}/threads_publish"
-    publish_payload = {
-        "creation_id": creation_id,
-        "access_token": TOKEN
-    }
+def validate_and_format_post(content: str) -> str:
+    """Enforces Threads' 500-character limit."""
+    content = content.strip()
+    if len(content) > THREADS_CHAR_LIMIT:
+        logger.warning(f"⚠️ Truncating post ({len(content)} chars -> {THREADS_CHAR_LIMIT}).")
+        content = content[: THREADS_CHAR_LIMIT - 3].strip() + "..."
+    return content
 
-    print("Publishing to Threads...")
-    res_publish = requests.post(publish_url, data=publish_payload).json()
 
-    if "id" in res_publish:
-        print(f"Success! Published post ID: {res_publish['id']}")
-    else:
-        print(f"Failed to publish: {res_publish}")
+async def run_daily_job():
+    """Main orchestrator function for the headless automated pipeline."""
+    logger.info("🚀 Starting automated morning post job...")
+    try:
+        # 1. Fetch S&P 500 top dip and generate draft via Gemini
+        ticker, raw_content = await async_generate_auto_daily_post()
+        logger.info(f"📌 Picked ${ticker}:\n{raw_content}\n")
+
+        # 2. Validate length
+        final_content = validate_and_format_post(raw_content)
+
+        # 3. Post to Threads
+        post_id = await post_to_threads(final_content)
+        logger.info(f"✅ Successfully posted live to Threads! [ID: {post_id}]")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to complete daily post job: {e}", exc_info=True)
+
 
 if __name__ == "__main__":
-    test_message = "Hello from automated Python script! 🚀"
-    post_to_threads(test_message)
+    # Allows you to trigger the whole job by running: python threads_poster.py
+    asyncio.run(run_daily_job())
