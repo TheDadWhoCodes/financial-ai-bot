@@ -18,7 +18,7 @@ THREADS_CHAR_LIMIT = 500
 async def post_to_threads(text_content: str) -> str:
     """Publishes a text post to Threads using Meta's official Graph API."""
     access_token = settings.THREADS_ACCESS_TOKEN.get_secret_value()
-    user_id = settings.THREADS_APP_ID
+    user_id = settings.THREADS_USER_ID
 
     if not access_token or not settings.THREADS_USER_ID:
         raise ValueError("Missing THREADS_ACCESS_TOKEN or THREADS_USER_ID in settings.")
