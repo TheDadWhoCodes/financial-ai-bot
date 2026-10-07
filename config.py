@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     # Optional / Future Social Tokens (Phase 2)
     THREADS_APP_ID: Optional[str] = None
+    THREADS_USER_ID: Optional[str] = None
     THREADS_ACCESS_TOKEN: SecretStr  # <-- Add this line
 
     model_config = SettingsConfigDict(

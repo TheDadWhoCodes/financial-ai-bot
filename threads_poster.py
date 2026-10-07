@@ -20,8 +20,8 @@ async def post_to_threads(text_content: str) -> str:
     access_token = settings.THREADS_ACCESS_TOKEN.get_secret_value()
     user_id = settings.THREADS_APP_ID
 
-    if not access_token or not user_id:
-        raise ValueError("Missing THREADS_ACCESS_TOKEN or THREADS_APP_ID in settings.")
+    if not access_token or not settings.THREADS_USER_ID:
+        raise ValueError("Missing THREADS_ACCESS_TOKEN or THREADS_USER_ID in settings.")
 
     async with httpx.AsyncClient() as client:
         # Step 1: Create Container
