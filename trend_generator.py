@@ -1,68 +1,91 @@
+import asyncio
 import os
 import time
+import json
 import yfinance as yf
 from google import genai
 from google.genai import errors, types
+from config import settings
 
-# 1. Configure your free Gemini API Key
-GEMINI_API_KEY = "AQ.Ab8RN6KL21cpFi7UE2jjS81n5oewoakBP4XZZtDxNa5u_G2Y8Q"
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=settings.GEMINI_API_KEY.get_secret_value())
 
-# A watchlist of trending market tickers to analyze
 WATCHLIST = ["NVDA", "AAPL", "MSFT", "TSLA", "AMD", "AMZN", "GOOG", "ASML", "VOO"]
+FREE_MODELS = ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-lite"]
 
-# Fallback pool of free-tier models in case one is busy (503)
-FREE_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
 
-def fetch_stock_mover(ticker_symbol):
-    """ Fetches key data for a popular stock using yfinance. """
+def fetch_stock_mover(ticker_symbol: str) -> dict | None:
+    """ Fetches comprehensive data for a popular stock using yfinance. """
     try:
         stock = yf.Ticker(ticker_symbol)
         info = stock.info
 
+        # Extract valuation metrics
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        forward_pe = info.get("forwardPE")
+        trailing_pe = info.get("trailingPE")
+
+        # Format metrics cleanly so Gemini isn't misled by a single consensus number
+        pe_summary = []
+        if trailing_pe:
+            pe_summary.append(f"Trailing P/E: {round(trailing_pe, 2)}")
+        if forward_pe:
+            pe_summary.append(f"Forward P/E: {round(forward_pe, 2)}")
+
+        pe_str = ", ".join(pe_summary) if pe_summary else "N/A"
+
         return {
             "symbol": ticker_symbol,
             "name": info.get("shortName", ticker_symbol),
-            "price": info.get("currentPrice", info.get("regularMarketPrice")),
-            "pe_ratio": info.get("forwardPE"),
+            "price": f"${price}" if price else "N/A",
+            "pe_ratio": pe_str,
             "summary": info.get("longBusinessSummary", "")[:300]
         }
     except Exception as e:
         print(f"⚠️ Error fetching data for {ticker_symbol}: {e}")
         return None
 
-def generate_social_post(stock_data):
-    """Generates post with AFC explicitly disabled and automatic model fallback for 503 errors."""
+
+def pick_best_stock_and_draft(watchlist_data: list[dict]) -> tuple[str, str] | None:
+    """Asks Gemini to evaluate all watchlist items, pick the most interesting buy, and generate a post."""
     
+    # Format stock summary data for Gemini evaluation
+    stocks_summary = "\n".join([
+        f"- {s['symbol']} ({s['name']}): Price={s['price']}, Valuation=[{s['pe_ratio']}]"
+        for s in watchlist_data
+    ])
+
     prompt = f"""
-    You are an expert financial commentator writing for X (Twitter) and Threads.
-    
-    Analyze this market data:
-    Stock: {stock_data['name']} (${stock_data['symbol']})
-    Current Price: ${stock_data['price']}
-    Forward P/E Ratio: {stock_data['pe_ratio']}
-    Business Snippet: {stock_data['summary']}
+    You are an expert financial commentator writing for X and Threads for retail/high-street investors.
 
-    Write a punchy, engaging post following these strict rules:
-    1. Line 1 MUST be a strong, curiosity-driven hook.
-    2. Follow with 2 short bullet points highlighting why it's interesting or looking attractive.
-    3. End with an open-ended question to drive reader replies.
-    4. Keep the total post under 280 characters.
-    5. Add a subtle line: "Educational only, DYOR."
+    Review this watchlist data:
+    {stocks_summary}
 
-    content should be understandable like a 'explain like i'm 5' format, and aimed at the high street investors
+    TASK:
+    1. Select the SINGLE stock that looks most attractive or has the most interesting setup for a retail investor today.
+    2. Write a punchy, engaging post about it following these strict rules:
+       - Explain it simply (Explain Like I'm 5 format).
+       - Line 1 MUST be a strong, curiosity-driven hook.
+       - Follow with 2 short bullet points on why it's attractive right now.
+       - End with an open-ended question to drive reader replies.
+       - Keep total post under 280 characters.
+
+    OUTPUT FORMAT:
+    Respond strictly in JSON format with two keys:
+    {{
+        "selected_ticker": "TICKER_SYMBOL",
+        "post_content": "Your full draft text here"
+    }}
     """
 
-    # Explicit config disabling AFC to eliminate SDK warnings
     config = types.GenerateContentConfig(
+        response_mime_type="application/json",
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
     )
 
     max_retries = 3
-    delay = 3
+    delay = 5
 
     for attempt in range(max_retries):
-        # Rotate model string on retries if the main model is under heavy load
         current_model = FREE_MODELS[attempt % len(FREE_MODELS)]
         try:
             response = client.models.generate_content(
@@ -70,11 +93,11 @@ def generate_social_post(stock_data):
                 contents=prompt,
                 config=config,
             )
-            return response.text
+            result = json.loads(response.text)
+            return result["selected_ticker"], result["post_content"]
 
         except errors.APIError as e:
             if getattr(e, 'code', None) in [503, 429] and attempt < max_retries - 1:
-                print(f"⚠️ {current_model} busy ({e.code}). Retrying with fallback in {delay}s...")
                 time.sleep(delay)
                 delay *= 2
             else:
@@ -82,31 +105,50 @@ def generate_social_post(stock_data):
                 return None
         except Exception as e:
             if attempt < max_retries - 1:
-                print(f"⚠️ Unexpected error ({e}). Retrying in {delay}s...")
                 time.sleep(delay)
                 delay *= 2
             else:
                 print(f"❌ Failed after retries: {e}")
                 return None
 
-if __name__ == "__main__":
-    print("🚀 Starting Daily Trend Generator...\n")
 
-    for ticker in WATCHLIST:
-        print("🔍 Fetching market data...")
-        stock_data = fetch_stock_mover(ticker)
-
-        if stock_data:
-            print("🤖 Generating AI post draft...\n")
-            post_draft = generate_social_post(stock_data)
+def generate_auto_daily_post() -> tuple[str, str]:
+    """Scans all stocks in WATCHLIST, picks the best setup, and returns (ticker, draft_text)."""
+    watchlist_data = []
     
-            print("----------------------------------------")
-            print(post_draft)
-            print("----------------------------------------")
+    print("🔍 Fetching data for watchlist stocks...")
+    for ticker in WATCHLIST:
+        data = fetch_stock_mover(ticker)
+        if data:
+            watchlist_data.append(data)
+        time.sleep(0.5)
 
-        # RATE LIMIT GUARD: Pause for 4 seconds between requests
-        # (Keeps you safely under Gemini's 15 requests per minute limit)
-        print("⏳ Pausing 4 seconds to respect API rate limits...\n")
-        time.sleep(4)
+    if not watchlist_data:
+        raise ValueError("Could not fetch data for any watchlist stocks.")
 
-    print("✅ Completed processing watchlist!")
+    print("🤖 Evaluating market setups and picking the best ticker...")
+    res = pick_best_stock_and_draft(watchlist_data)
+    
+    if not res:
+        raise ValueError("Failed to evaluate and pick a stock draft.")
+
+    return res  # returns tuple: ("NVDA", "Draft content...")
+
+
+async def async_generate_auto_daily_post() -> tuple[str, str]:
+    """Async wrapper for the auto picker."""
+    return await asyncio.to_thread(generate_auto_daily_post)
+
+
+def generate_single_ticker_post(ticker_symbol: str = "NVDA") -> str:
+    """Helper function to fetch market data and return a single generated post for Telegram."""
+    stock_data = fetch_stock_mover(ticker_symbol)
+    if not stock_data:
+        return f"⚠️ Could not fetch market data for ${ticker_symbol}."
+    
+    # Simple fallback using original logic
+    return f"Market update on ${ticker_symbol} coming soon!"
+
+
+async def async_generate_single_ticker_post(ticker_symbol: str = "NVDA") -> str:
+    return await asyncio.to_thread(generate_single_ticker_post, ticker_symbol)
