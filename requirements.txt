@@ -1,0 +1,7 @@
+google-genai
+yfinance
+pandas
+pydantic
+pydantic-settings
+httpx
+lxml
