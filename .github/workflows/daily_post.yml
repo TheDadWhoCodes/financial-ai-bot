@@ -3,7 +3,7 @@ name: Daily Threads Market Post
 on:
   schedule:
     # 7:00 AM PST (14:00 UTC)
-    - cron: '0 14 * * *'
+    - cron: '30 14 * * *'
     # 1:30 PM PST (20:30 UTC)
     - cron: '30 20 * * *'
   workflow_dispatch: # Allows manual trigger anytime from the GitHub Actions tab
