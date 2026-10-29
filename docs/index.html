@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Financial AI Bot</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>&#128200; Financial AI Bot</h1>
+
+  <div class="card">
+    <h2>Bot Status</h2>
+    <div class="toggle-wrapper">
+      <span id="statusText">On</span>
+      <label class="toggle">
+        <input type="checkbox" id="enabledToggle" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Threads Account</h2>
+    <div class="form-group">
+      <label for="threadsUserId">Threads User ID (the account that posts)</label>
+      <input type="text" id="threadsUserId" placeholder="e.g. 17841234567890123">
+      <p class="hint">Numeric Threads User ID from Meta Graph API. Leave blank to use default secret.</p>
+    </div>
+  </div>
+
+  <div class="auth-note">
+    <p>Before using this panel, create a GitHub fine-grained Personal Access Token (with <code>Actions: read/write</code> and <code>Contents: read/write</code>) and paste it below.</p>
+    <input type="password" id="accessToken" placeholder="ghp_...">
+  </div>
+
+  <div style="margin-top:1rem">
+    <button class="btn btn-primary" id="saveBtn">Save &amp; Run Now</button>
+    <button class="btn btn-secondary" id="statusBtn">Check Last Run</button>
+  </div>
+
+  <div id="output" class="output"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -6,10 +6,23 @@ on:
     - cron: '30 14 * * *'
     # 1:30 PM PST (20:30 UTC)
     - cron: '30 20 * * *'
-  workflow_dispatch: # Allows manual trigger anytime from the GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      enabled:
+        description: 'Enable posting?'
+        type: boolean
+        required: false
+        default: true
+      threads_user_id:
+        description: 'Threads User ID to post as (leave blank for default secret)'
+        type: string
+        required: false
 
 jobs:
   run-poster:
+    # The on/off switch is read from bot_config.json (written by the GitHub Pages
+    # control panel) so that BOTH scheduled and manual runs honor it. workflow_dispatch
+    # inputs take precedence over the config file when provided.
     runs-on: ubuntu-latest
 
     steps:
@@ -27,9 +40,30 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Read bot config
+        id: config
+        run: |
+          ENABLED="true"
+          USER_ID=""
+          if [ -f bot_config.json ]; then
+            ENABLED=$(python3 -c "import json;d=json.load(open('bot_config.json'));print(str(d.get('enabled','true')).lower())")
+            USER_ID=$(python3 -c "import json;d=json.load(open('bot_config.json'));print(d.get('threads_user_id','') or '')")
+          fi
+          # workflow_dispatch inputs override the committed config file
+          if [ -n "${{ github.event.inputs.enabled }}" ]; then
+            ENABLED="${{ github.event.inputs.enabled }}"
+          fi
+          if [ -n "${{ github.event.inputs.threads_user_id }}" ]; then
+            USER_ID="${{ github.event.inputs.threads_user_id }}"
+          fi
+          echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
+          echo "threads_user_id=$USER_ID" >> $GITHUB_OUTPUT
+
       - name: Run Threads Poster Script
+        if: steps.config.outputs.enabled == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
-          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          POST_ENABLED: ${{ steps.config.outputs.enabled }}
+          THREADS_USER_ID: ${{ steps.config.outputs.threads_user_id }}
         run: python threads_poster.py
