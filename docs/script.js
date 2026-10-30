@@ -3,6 +3,10 @@ const OWNER = 'edmundchan';
 const REPO = 'financial-ai-bot';
 const CONFIG_FILE = 'bot_config.json';
 
+// --- Auth ---
+// Build-time injected password (GitHub Actions replaces this during build)
+const PASSWORD = "__DASHBOARD_PASSWORD__";
+
 const enabledToggle = document.getElementById('enabledToggle');
 const threadsUserIdInput = document.getElementById('threadsUserId');
 const accessTokenInput = document.getElementById('accessToken');
@@ -10,16 +14,61 @@ const saveBtn = document.getElementById('saveBtn');
 const statusBtn = document.getElementById('statusBtn');
 const output = document.getElementById('output');
 const statusText = document.getElementById('statusText');
+const loginScreen = document.getElementById('login-screen');
+const protectedContent = document.getElementById('protected-content');
 
-// Load persisted settings from localStorage
-if (localStorage.getItem('bot_enabled') !== null) {
-  enabledToggle.checked = localStorage.getItem('bot_enabled') === 'true';
-  statusText.textContent = enabledToggle.checked ? 'On' : 'Off';
+// --- Auth Gate ---
+function checkAuth() {
+  const savedAuth = sessionStorage.getItem('authenticated');
+  if (savedAuth === 'true') {
+    showDashboard();
+  } else {
+    showLogin();
+  }
 }
-const savedUserId = localStorage.getItem('threads_user_id');
-if (savedUserId) threadsUserIdInput.value = savedUserId;
-const savedToken = localStorage.getItem('gh_pat');
-if (savedToken) accessTokenInput.value = savedToken;
+
+function login() {
+  const input = document.getElementById('passInput').value;
+  if (input === PASSWORD) {
+    sessionStorage.setItem('authenticated', 'true');
+    showDashboard();
+  } else {
+    document.getElementById('auth-error').style.display = 'block';
+    document.getElementById('passInput').value = '';
+  }
+}
+
+function showLogin() {
+  loginScreen.style.display = 'flex';
+  protectedContent.style.display = 'none';
+}
+
+function showDashboard() {
+  loginScreen.style.display = 'none';
+  protectedContent.style.display = 'block';
+  initDashboard();
+}
+
+// --- Dashboard ---
+function initDashboard() {
+  // Load persisted settings from localStorage
+  if (localStorage.getItem('bot_enabled') !== null) {
+    enabledToggle.checked = localStorage.getItem('bot_enabled') === 'true';
+    statusText.textContent = enabledToggle.checked ? 'On' : 'Off';
+  }
+  const savedUserId = localStorage.getItem('threads_user_id');
+  if (savedUserId) threadsUserIdInput.value = savedUserId;
+  const savedToken = localStorage.getItem('gh_pat');
+  if (savedToken) accessTokenInput.value = savedToken;
+
+  enabledToggle.addEventListener('change', () => {
+    localStorage.setItem('bot_enabled', String(enabledToggle.checked));
+    statusText.textContent = enabledToggle.checked ? 'On' : 'Off';
+  });
+
+  saveBtn.addEventListener('click', handleSave);
+  statusBtn.addEventListener('click', handleStatus);
+}
 
 function log(msg) {
   const div = document.createElement('div');
@@ -86,7 +135,7 @@ async function getLastRun() {
   return request('GET', runsUrl);
 }
 
-saveBtn.addEventListener('click', async () => {
+async function handleSave() {
   const token = accessTokenInput.value.trim();
   if (!token) { alert('Please paste your GitHub Personal Access Token.'); return; }
   saveBtn.disabled = true;
@@ -105,9 +154,9 @@ saveBtn.addEventListener('click', async () => {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save & Run Now';
   }
-});
+}
 
-statusBtn.addEventListener('click', async () => {
+async function handleStatus() {
   statusBtn.disabled = true;
   statusBtn.textContent = 'Checking...';
   output.innerHTML = '';
@@ -125,9 +174,7 @@ statusBtn.addEventListener('click', async () => {
     statusBtn.disabled = false;
     statusBtn.textContent = 'Check Last Run';
   }
-});
+}
 
-enabledToggle.addEventListener('change', () => {
-  localStorage.setItem('bot_enabled', String(enabledToggle.checked));
-  statusText.textContent = enabledToggle.checked ? 'On' : 'Off';
-});
+// --- Initialize ---
+window.onload = checkAuth;

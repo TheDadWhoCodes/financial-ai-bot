@@ -1,0 +1,41 @@
+
+name: Deploy GitHub Pages with Password
+
+on:
+  push:
+    branches: ["main"] # Change to "master" if your default branch is master
+  workflow_dispatch:
+
+# Sets permissions to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Inject Secret Password into index.html
+        run: |
+          # This safely swaps out the placeholder in index.html with your GitHub Secret password
+          sed -i 's|__DASHBOARD_PASSWORD__|${{ secrets.DASHBOARD_PASSWORD }}|g' index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.' # Publishes your root directory containing index.html, style.css, and script.js
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

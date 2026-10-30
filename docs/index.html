@@ -3,10 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Financial AI Bot</title>
+  <title>Financial AI Bot Control Panel</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<!-- Login Screen -->
+<div id="login-screen" class="card" style="display:flex;flex-direction:column;align-items:center;gap:1rem;text-align:center">
+  <h2>&#128274; Financial AI Bot</h2>
+  <p style="color:#666;font-size:0.9rem">Enter dashboard password</p>
+  <input type="password" id="passInput" placeholder="Password" style="width:100%;max-width:300px;padding:.65rem;border:1px solid #d1d5db;border-radius:6px;font-size:1rem">
+  <button class="btn btn-primary" onclick="login()">Unlock</button>
+  <p id="auth-error" style="color:#ef4444;font-size:.85rem;display:none">Incorrect password!</p>
+</div>
+
+<!-- Protected Content -->
+<div id="protected-content" style="display:none">
   <h1>&#128200; Financial AI Bot</h1>
 
   <div class="card">
@@ -30,17 +42,18 @@
   </div>
 
   <div class="auth-note">
-    <p>Before using this panel, create a GitHub fine-grained Personal Access Token (with <code>Actions: read/write</code> and <code>Contents: read/write</code>) and paste it below.</p>
+    <p>Enter your GitHub fine-grained PAT (with <code>Actions: read/write</code> and <code>Contents: read/write</code>) to save settings and trigger runs.</p>
     <input type="password" id="accessToken" placeholder="ghp_...">
   </div>
 
   <div style="margin-top:1rem">
-    <button class="btn btn-primary" id="saveBtn">Save &amp; Run Now</button>
+    <button class="btn btn-primary" id="saveBtn">Save & Run Now</button>
     <button class="btn btn-secondary" id="statusBtn">Check Last Run</button>
   </div>
 
   <div id="output" class="output"></div>
+</div>
 
-  <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
